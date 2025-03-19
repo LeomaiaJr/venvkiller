@@ -1,0 +1,222 @@
+"""Module for analyzing Python virtual environment details."""
+
+import os
+import time
+import subprocess
+import platform
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple
+
+def get_size(path: Path) -> int:
+    """Get the size of a directory in bytes."""
+    total_size = 0
+    
+    try:
+        # Fast path for platforms with os.scandir
+        with os.scandir(path) as it:
+            for entry in it:
+                if entry.is_file():
+                    try:
+                        total_size += entry.stat().st_size
+                    except (OSError, FileNotFoundError):
+                        pass
+                elif entry.is_dir():
+                    total_size += get_size(Path(entry.path))
+    except (PermissionError, OSError, FileNotFoundError):
+        return 0
+        
+    return total_size
+
+def format_size(size_bytes: int) -> str:
+    """Format bytes to human readable format."""
+    if size_bytes == 0:
+        return "0 B"
+        
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+    factor = 1024
+    
+    size_value = size_bytes
+    suffix_index = 0
+    
+    while size_value >= factor and suffix_index < len(suffixes) - 1:
+        size_value /= factor
+        suffix_index += 1
+    
+    return f"{size_value:.1f} {suffixes[suffix_index]}"
+
+def format_time_ago(timestamp: float) -> str:
+    """Format a timestamp as a human-readable 'time ago' string."""
+    now = time.time()
+    diff = now - timestamp
+    
+    if diff < 60:
+        return "Just now"
+    elif diff < 3600:
+        minutes = int(diff / 60)
+        return f"{minutes}m ago"
+    elif diff < 86400:
+        hours = int(diff / 3600)
+        return f"{hours}h ago"
+    elif diff < 604800:  # 7 days
+        days = int(diff / 86400)
+        return f"{days}d ago"
+    elif diff < 2592000:  # 30 days
+        weeks = int(diff / 604800)
+        return f"{weeks}w ago"
+    elif diff < 31536000:  # 365 days
+        months = int(diff / 2592000)
+        return f"{months}mo ago"
+    else:
+        years = int(diff / 31536000)
+        return f"{years}y ago"
+
+def get_venv_info(venv_path: Path) -> Dict[str, Any]:
+    """Get detailed information about a virtual environment.
+    
+    Returns a dictionary with information about the venv:
+    - path: Full path to the venv
+    - size: Size in bytes
+    - size_formatted: Human-readable size
+    - modified: Last modified timestamp
+    - modified_ago: Human-readable time ago
+    - age_days: Age in days
+    - py_version: Python version if detectable
+    - packages_count: Number of installed packages if detectable
+    - has_requirements: Whether requirement files exist
+    - requirement_files: List of found requirement files
+    """
+    info = {
+        'path': str(venv_path),
+        'size': 0,
+        'size_formatted': '0 B',
+        'modified': 0,
+        'modified_ago': 'Unknown',
+        'age_days': 0,
+        'py_version': 'Unknown',
+        'packages_count': 0,
+        'has_requirements': False,
+        'requirement_files': []
+    }
+    
+    try:
+        # Get directory stats
+        stats = venv_path.stat()
+        
+        # Size calculation
+        size = get_size(venv_path)
+        info['size'] = size
+        info['size_formatted'] = format_size(size)
+        
+        # Last modified time
+        info['modified'] = stats.st_mtime
+        info['modified_ago'] = format_time_ago(stats.st_mtime)
+        
+        # Age in days
+        modified_date = datetime.fromtimestamp(stats.st_mtime)
+        age_days = (datetime.now() - modified_date).days
+        info['age_days'] = age_days
+        
+        # Try to detect Python version
+        info['py_version'] = detect_python_version(venv_path)
+        
+        # Try to count packages
+        info['packages_count'] = count_installed_packages(venv_path)
+        
+        # Check for requirements files
+        from venvkiller.finder import has_requirement_files
+        has_reqs, req_files = has_requirement_files(venv_path.parent)
+        info['has_requirements'] = has_reqs
+        info['requirement_files'] = req_files
+        
+    except (OSError, PermissionError):
+        pass
+    
+    return info
+
+def detect_python_version(venv_path: Path) -> str:
+    """Try to detect the Python version used in the virtual environment."""
+    # Check for version in pyvenv.cfg
+    cfg_path = venv_path / 'pyvenv.cfg'
+    if cfg_path.exists():
+        try:
+            with open(cfg_path, 'r') as f:
+                for line in f:
+                    if line.startswith('version'):
+                        return line.split('=')[1].strip()
+        except (OSError, PermissionError):
+            pass
+    
+    # Try to run the Python binary
+    py_paths = []
+    if platform.system() == 'Windows':
+        py_paths.append(venv_path / 'Scripts' / 'python.exe')
+    else:
+        py_paths.append(venv_path / 'bin' / 'python')
+    
+    for py_path in py_paths:
+        if py_path.exists():
+            try:
+                result = subprocess.run(
+                    [str(py_path), '-V'], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    return result.stdout.strip().replace('Python ', '')
+            except (subprocess.SubprocessError, OSError):
+                pass
+    
+    return 'Unknown'
+
+def count_installed_packages(venv_path: Path) -> int:
+    """Count the number of installed packages in the virtual environment."""
+    # Find the site-packages directory
+    site_dirs = []
+    if platform.system() == 'Windows':
+        site_dirs.extend(list(venv_path.glob('Lib/site-packages')))
+    else:
+        # Unix systems typically have lib/pythonX.Y/site-packages
+        site_dirs.extend(list(venv_path.glob('lib/python*/site-packages')))
+    
+    if not site_dirs:
+        return 0
+    
+    # Count directories and .dist-info/.egg-info directories
+    try:
+        count = 0
+        for site_dir in site_dirs:
+            if site_dir.exists():
+                dist_info_count = len(list(site_dir.glob('*.dist-info')))
+                egg_info_count = len(list(site_dir.glob('*.egg-info')))
+                count += max(dist_info_count, egg_info_count)
+        return count
+    except (OSError, PermissionError):
+        return 0
+
+def classify_venv_age(age_days: int, recent_threshold: int = 30, old_threshold: int = 180) -> str:
+    """Classify a virtual environment by age for color coding.
+    
+    Returns:
+        'recent', 'normal', or 'old' for green, yellow, or red colors
+    """
+    if age_days < recent_threshold:
+        return 'recent'
+    elif age_days > old_threshold:
+        return 'old'
+    else:
+        return 'normal'
+
+def open_containing_folder(path: Path) -> None:
+    """Open the folder containing a virtual environment in the system file browser."""
+    folder = path.parent
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(folder)
+        elif platform.system() == 'Darwin':  # macOS
+            subprocess.run(['open', str(folder)], check=True)
+        else:  # Linux
+            subprocess.run(['xdg-open', str(folder)], check=True)
+    except (OSError, subprocess.SubprocessError):
+        pass  # Silently fail
