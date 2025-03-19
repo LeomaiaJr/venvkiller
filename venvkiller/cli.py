@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
@@ -27,6 +28,15 @@ from venvkiller.cleaner import delete_multiple_venvs, safe_delete_venv
 
 # Initialize console for non-TUI output
 console = Console()
+
+# Setup file-based logging
+logging.basicConfig(
+    filename='venvkiller_debug.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filemode='w'
+)
+logger = logging.getLogger("venvkiller")
 
 def format_bytes(bytes_: int) -> str:
     """Format bytes to human-readable string."""
@@ -195,6 +205,9 @@ class VenvKillerApp(App):
         self.marked_venvs = set()
         self.deleted_venvs = set()
         
+        # Log initialization
+        logger.info(f"VenvKiller initialized with start_dir={self.start_dir}, recent={recent_threshold}, old={old_threshold}")
+        
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
         yield Header(show_clock=True)
@@ -321,6 +334,13 @@ class VenvKillerApp(App):
         # Clear existing rows
         self.table.clear()
         
+        # Key-to-row mapping
+        self.key_to_row = {}
+        row_index = 0
+        
+        logger.info(f"Populating table with {len(self.venvs)} venvs (minus {len(self.deleted_venvs)} deleted)")
+        logger.debug(f"Current marked venvs: {self.marked_venvs}")
+        
         # Add venvs to table
         for i, venv in enumerate(self.venvs):
             # Skip deleted venvs
@@ -342,8 +362,10 @@ class VenvKillerApp(App):
             else:
                 path_style = "yellow"
             
-            # Mark status
-            mark = "✓" if i in self.marked_venvs else ""
+            # Mark status with visible checkmark
+            is_marked = i in self.marked_venvs
+            mark = "✓" if is_marked else " "
+            mark_cell = Text(mark, style="bold green" if is_marked else "")
             
             # Create right-aligned text for size and age
             size_text = Text(venv['size_formatted'], justify="right")
@@ -352,9 +374,12 @@ class VenvKillerApp(App):
             py_version = Text(venv.get('py_version', 'Unknown'), justify="center")
             req_status = Text("✓" if venv.get('has_requirements', False) else "✗", justify="center")
             
+            # Log the row being added
+            logger.debug(f"Adding row {row_index} for venv index {i}: {venv['path']} (marked: {is_marked})")
+            
             # Add row
             self.table.add_row(
-                mark,
+                mark_cell,
                 Text(venv['path'], style=path_style),
                 size_text,
                 age_text,
@@ -362,31 +387,168 @@ class VenvKillerApp(App):
                 req_status,
                 key=i  # Store the original index as key
             )
+            
+            # Store row index for this key
+            self.key_to_row[i] = row_index
+            row_index += 1
+            
+        logger.info(f"Table populated with {row_index} rows")
+        logger.debug(f"Key to row mapping: {self.key_to_row}")
     
+    def on_key(self, event) -> None:
+        """Log all key events for debugging."""
+        key_pressed = str(event.key)
+        logger.debug(f"Key pressed: {key_pressed}")
+        
+        # Extra logging for space key
+        if key_pressed == "space":
+            logger.info("SPACE KEY PRESSED - Beginning detailed diagnostics")
+            
+            # Log the state of the application
+            logger.info(f"App state: {len(self.venvs)} venvs, {len(self.marked_venvs)} marked")
+            
+            # Check if table is ready
+            if not hasattr(self, 'table') or self.table is None:
+                logger.error("Table object not available")
+                return
+            
+            # Log table properties
+            logger.info(f"Table properties: row_count={self.table.row_count}, cursor_type={self.table.cursor_type}")
+            
+            # Get current cursor position if available
+            cursor_row = getattr(self.table, 'cursor_row', None)
+            logger.info(f"Current cursor row: {cursor_row}")
+            
+            # Detailed cursor information
+            try:
+                if hasattr(self.table, 'cursor_coordinate'):
+                    cursor_coord = self.table.cursor_coordinate
+                    logger.info(f"Cursor coordinates: {cursor_coord}")
+                    
+                    if cursor_coord is not None:
+                        # Try to get row data
+                        try:
+                            row_data = self.table.get_row_at(cursor_coord.row)
+                            if row_data is None:
+                                logger.error(f"No row data at cursor row {cursor_coord.row}")
+                            else:
+                                # Get row key from row_key mapping
+                                row_index = cursor_coord.row
+                                row_key = self._find_key_for_row(row_index)
+                                        
+                                logger.info(f"Row data found: index={row_index}, key={row_key}")
+                                
+                                # Log the cells in the row
+                                for i, cell in enumerate(row_data):
+                                    cell_text = str(cell.text) if hasattr(cell, 'text') else str(cell)
+                                    logger.info(f"Cell {i}: {cell_text}")
+                                    
+                                # Check if this row is already marked
+                                if row_key is not None and row_key in self.marked_venvs:
+                                    logger.info(f"Row {row_key} is currently MARKED")
+                                elif row_key is not None:
+                                    logger.info(f"Row {row_key} is currently UNMARKED")
+                        except Exception as e:
+                            logger.error(f"Error fetching row data: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Error examining cursor: {e}", exc_info=True)
+        
+        # For other keys, provide basic information
+        else:
+            # Get current cursor position if available
+            cursor_row = getattr(self.table, "cursor_row", None)
+            logger.debug(f"Current cursor row: {cursor_row}")
+            
+            if cursor_row is not None:
+                try:
+                    row_coordinates = self.table.cursor_coordinate
+                    row_data = self.table.get_row_at(row_coordinates.row) if row_coordinates else None
+                    
+                    logger.debug(f"Row coordinates: {row_coordinates}")
+                    logger.debug(f"Row data: {row_data}")
+                except Exception as e:
+                    logger.error(f"Error logging row data: {e}")
+    
+    def on_textual_event(self, event) -> None:
+        """Log all textual events for debugging."""
+        # Only log certain types of events to avoid noise
+        event_name = type(event).__name__
+        if any(name in event_name for name in ['Key', 'Mouse', 'Click', 'Table']):
+            logger.debug(f"Textual event: {event_name}")
+    
+    def _find_key_for_row(self, row_index):
+        """Helper method to find the key for a given row index."""
+        for k, v in self.key_to_row.items():
+            if v == row_index:
+                return k
+        return None
+
     def action_toggle_marked(self) -> None:
         """Toggle the marked status of the selected row."""
         if not self.table.row_count:
+            logger.error("No rows in table")
             return
             
         # Get current cursor row
         cursor_row = self.table.cursor_row
         if cursor_row is None:
+            logger.error("No cursor row")
             return
-            
-        # Get the original index (key) from the row
-        row_data = self.table.get_row_at(cursor_row)
-        if not row_data or len(row_data) < 7:
-            return
-            
-        row_key = row_data[6]
         
-        if row_key in self.marked_venvs:
-            self.marked_venvs.remove(row_key)
-        else:
-            self.marked_venvs.add(row_key)
+        logger.info(f"Toggle marked on cursor row: {cursor_row}")
+        
+        try:
+            # Get the row key through cursor coordinates
+            row_coordinates = self.table.cursor_coordinate
+            if row_coordinates is None:
+                logger.error("No cursor coordinates")
+                return
+                
+            # Log current coordinates for debugging
+            logger.debug(f"Cursor coordinates: {row_coordinates}")
             
-        # Update the mark column
-        self.table.update_cell_at((cursor_row, 0), "✓" if row_key in self.marked_venvs else "")
+            # Get the row data using the cursor coordinates
+            row_data = self.table.get_row_at(row_coordinates.row)
+            if row_data is None:
+                logger.error(f"Could not get row at position {cursor_row}")
+                return
+                
+            # Log row data for debugging
+            logger.debug(f"Row data: {row_data}")
+            
+            # Extract the key from row mapping using our helper method
+            row_index = row_coordinates.row
+            row_key = self._find_key_for_row(row_index)
+                    
+            if row_key is None:
+                logger.error(f"Could not find key for row index {row_index}")
+                return
+                
+            logger.info(f"Found row key: {row_key}")
+            
+            # Toggle the mark status
+            if row_key in self.marked_venvs:
+                self.marked_venvs.remove(row_key)
+                logger.info(f"Unmarked venv {row_key}")
+            else:
+                self.marked_venvs.add(row_key)
+                logger.info(f"Marked venv {row_key}")
+            
+            # Log mark status for debugging
+            logger.debug(f"Marked venvs: {self.marked_venvs}")
+            
+            # Most reliable approach: regenerate the entire table
+            # This ensures the marks are correctly displayed
+            logger.info("Regenerating table")
+            self.populate_table()
+            
+            # Restore cursor position
+            if cursor_row < self.table.row_count:
+                self.table.cursor_coordinate = (cursor_row, 0)
+                logger.info(f"Restored cursor to row {cursor_row}")
+                
+        except Exception as e:
+            logger.error(f"Error in toggle_marked: {e}", exc_info=True)
     
     def on_data_table_cell_highlighted(self, event) -> None:
         """Called when the cursor position changes in the table."""
@@ -394,19 +556,31 @@ class VenvKillerApp(App):
             return
         
         try:
+            # Log details about the event
+            logger.debug(f"Cell highlighted event: {event}")
+            
             # Determine which row is highlighted
             row = event.coordinate.row
             if row is None:
+                logger.debug("No row coordinate in cell highlight event")
                 return
                 
-            # Get the row data
+            # Get the row data directly
             row_data = self.table.get_row_at(row)
-            if row_data and len(row_data) >= 7:
-                row_key = row_data[6]
-                if 0 <= row_key < len(self.venvs):
+            if row_data is not None:
+                # Find key from row index mapping
+                row_key = self._find_key_for_row(row)
+                        
+                logger.debug(f"Cell highlighted: row={row}, key={row_key}")
+                
+                if row_key is not None and 0 <= row_key < len(self.venvs):
                     self.query_one(VenvDetailsPanel).update_venv(self.venvs[row_key])
+                else:
+                    logger.warning(f"Invalid row key {row_key}, venvs length: {len(self.venvs)}")
+            else:
+                logger.debug(f"No row data for row {row}")
         except Exception as e:
-            self.log.error(f"Error updating details: {e}")
+            logger.error(f"Error in cell highlighted: {e}", exc_info=True)
     
     def on_data_table_row_highlighted(self, event) -> None:
         """Called when a row is highlighted in the table."""
@@ -414,11 +588,25 @@ class VenvKillerApp(App):
             return
             
         try:
-            row_key = event.row_key.value if hasattr(event, 'row_key') else None
-            if row_key is not None and 0 <= row_key < len(self.venvs):
-                self.query_one(VenvDetailsPanel).update_venv(self.venvs[row_key])
+            # Log details about the event
+            logger.debug(f"Row highlighted event: {event}")
+            
+            # Get row index and find the key from our mapping
+            row_index = event.cursor_row if hasattr(event, 'cursor_row') else None
+            
+            if row_index is not None:
+                # Find key from row index mapping
+                row_key = self._find_key_for_row(row_index)
+                
+                logger.debug(f"Row highlighted: row_index={row_index}, row_key={row_key}")
+                
+                if row_key is not None and 0 <= row_key < len(self.venvs):
+                    self.query_one(VenvDetailsPanel).update_venv(self.venvs[row_key])
+                    logger.debug(f"Updated details panel with venv {row_key}: {self.venvs[row_key]['path']}")
+                elif row_key is not None:
+                    logger.warning(f"Invalid row key {row_key}, venvs length: {len(self.venvs)}")
         except Exception as e:
-            self.log.error(f"Error in row highlighted: {e}")
+            logger.error(f"Error in row highlighted: {e}", exc_info=True)
     
     def action_open(self) -> None:
         """Open the folder containing the selected venv."""
@@ -430,17 +618,22 @@ class VenvKillerApp(App):
         if cursor_row is None:
             return
             
-        # Get row data
-        row_data = self.table.get_row_at(cursor_row)
-        if not row_data or len(row_data) < 7:
-            return
-            
-        row_key = row_data[6]
-        if 0 <= row_key < len(self.venvs):
-            venv_path = Path(self.venvs[row_key]['path'])
-            open_containing_folder(venv_path)
+        try:
+            # Get the row data directly
+            row_coordinates = self.table.cursor_coordinate
+            if row_coordinates is not None:
+                row_index = row_coordinates.row
+                
+                # Find key from row index mapping
+                row_key = self._find_key_for_row(row_index)
+                        
+                if row_key is not None and 0 <= row_key < len(self.venvs):
+                    venv_path = Path(self.venvs[row_key]['path'])
+                    open_containing_folder(venv_path)
+        except Exception as e:
+            logger.error(f"Error opening folder: {e}", exc_info=True)
     
-    async def action_delete(self) -> None:
+    def action_delete(self) -> None:
         """Delete marked venvs."""
         if not self.marked_venvs:
             return
@@ -456,13 +649,6 @@ class VenvKillerApp(App):
                 indices_to_delete.append(idx)
         
         if not paths_to_delete:
-            return
-        
-        # Ask for confirmation
-        if not await self.confirm_dialog(
-            f"Delete {len(paths_to_delete)} virtual environment(s)?", 
-            "This cannot be undone."
-        ):
             return
         
         # Show deletion progress dialog
@@ -520,47 +706,6 @@ class VenvKillerApp(App):
         elif button_id == "quit":
             self.action_quit()
     
-    async def confirm_dialog(self, title, message):
-        """Show a confirmation dialog."""
-        from textual._default_css import DEFAULT_CSS
-        from textual.app import App
-        from textual.widgets import Button, Label, Static
-        from textual.containers import Grid
-        
-        class ConfirmationDialog(App):
-            CSS = DEFAULT_CSS + """
-            Grid {
-                grid-size: 2;
-                grid-gutter: 1;
-                margin: 1 2;
-            }
-            Label {
-                width: 100%;
-                content-align: center middle;
-                text-style: bold;
-            }
-            #message {
-                column-span: 2;
-            }
-            """
-            result = False
-            
-            def compose(self) -> ComposeResult:
-                yield Label(title, id="title")
-                yield Static(message, id="message")
-                with Grid():
-                    yield Button("Cancel", variant="default", id="cancel")
-                    yield Button("Confirm", variant="error", id="confirm")
-            
-            def on_button_pressed(self, event) -> None:
-                if event.button.id == "confirm":
-                    self.result = True
-                self.exit()
-        
-        dialog = ConfirmationDialog()
-        await dialog.run()
-        return dialog.result
-    
     def action_quit(self) -> None:
         """Quit the application."""
         self.exit()
@@ -593,11 +738,15 @@ class VenvKillerApp(App):
 def main(start_dir, recent, old):
     """Find and delete Python virtual environments to free up disk space."""
     try:
+        logger.info(f"Starting VenvKiller v{__version__}")
         app = VenvKillerApp(start_dir, recent, old)
         app.run()
     except Exception as e:
+        logger.error(f"Fatal error: {str(e)}", exc_info=True)
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         sys.exit(1)
+    finally:
+        logger.info("VenvKiller terminated")
 
 
 if __name__ == "__main__":
