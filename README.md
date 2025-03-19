@@ -7,6 +7,8 @@
 
 A Python tool to find and delete Python virtual environments to free up disk space.
 
+![venvkiller Demo](assets/demo.gif)
+
 > **Inspiration**: This project was inspired by [npkill](https://www.npmjs.com/package/npkill), which provides similar functionality for cleaning up node_modules folders in JavaScript/Node.js projects.
 
 ## Why venvkiller?
@@ -70,10 +72,6 @@ venvkiller --recent 14 --old 90
 | 'd'        | Delete marked environments |
 | 'o'        | Open containing folder     |
 | 'q'        | Quit                       |
-
-## Screenshots
-
-![venvkiller Main Screen](https://raw.githubusercontent.com/LeomaiaJr/venvkiller/main/screenshots/main.png)
 
 ## Development
 
