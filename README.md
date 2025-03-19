@@ -10,6 +10,7 @@ A Python tool to find and delete Python virtual environments to free up disk spa
 - Cursor-based navigation for easy selection
 - Modern data table with sorting capabilities
 - Progress indicators during scanning operations
+- Loading indicator during environment scanning
 - Color-coding by age (green=recent, yellow=old, red=very old)
 - Verify requirements.txt/poetry/pipenv files exist before deletion
 - Keyboard shortcut to open containing folder

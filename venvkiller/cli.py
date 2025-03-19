@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
@@ -94,6 +95,46 @@ class StatsPanel(Static):
             f"[dim]Scan Time:[/dim] {self.scan_time:.1f}s"
         )
 
+class LoadingIndicator(Static):
+    """Custom loading indicator widget."""
+    
+    DEFAULT_CSS = """
+    LoadingIndicator {
+        width: 80%;
+        height: 11;
+        background: $boost;
+        border: panel $accent;
+        border-title-color: $accent;
+        padding: 1 2;
+        margin: 1 1;
+        content-align: center middle;
+    }
+    """
+    
+    def __init__(self, message="Scanning for environments..."):
+        super().__init__()
+        self.message = message
+        self.count = 0
+        self.total = 0
+        self.border_title = "VenvKiller"
+        
+    def update_progress(self, count, total=None):
+        """Update the progress count."""
+        self.count = count
+        if total is not None:
+            self.total = total
+        self.update()
+    
+    def render(self):
+        """Render the loading indicator with progress."""
+        progress_text = f"{self.count} environments found"
+        if self.total > 0:
+            progress_percent = min(100, int((self.count / self.total) * 100))
+            progress_bar = "▓" * (progress_percent // 5) + "░" * (20 - (progress_percent // 5))
+            progress_text = f"{self.count}/{self.total} environments ({progress_percent}%)\n{progress_bar}"
+            
+        return f"[bold]{self.message}[/bold]\n\n[bold]{progress_text}[/bold]\n\n[blink]⏳[/blink]"
+
 class VenvKillerApp(App):
     """Textual app for VenvKiller."""
     
@@ -124,6 +165,12 @@ class VenvKillerApp(App):
     
     Button {
         margin: 1 2;
+    }
+    
+    #loading-container {
+        width: 100%;
+        height: 100%;
+        align: center middle;
     }
     """
     
@@ -185,41 +232,90 @@ class VenvKillerApp(App):
     
     def scan_venvs(self) -> None:
         """Scan for virtual environments and populate the table."""
+        # Clear any existing data
+        self.venvs = []
+        self.total_size = 0
+        self.marked_venvs = set()
+        self.deleted_venvs = set()
+        
         # Show scanning message
         self.query_one(StatsPanel).update_stats(0, 0, 0, 0)
         self.sub_title = "Scanning for virtual environments..."
         
-        # Perform scan
-        start_time = time.time()
-        venv_paths = find_venvs(self.start_dir, parallel=True)
+        # Create a container for the loading indicator and hide other elements
+        loading_container = Container(id="loading-container")
+        loading = LoadingIndicator()
         
-        # Analyze each venv
-        for venv_path in venv_paths:
-            info = get_venv_info(venv_path)
-            self.venvs.append(info)
-            self.total_size += info.get('size', 0)
+        # Hide the table and details
+        self.query_one(DataTable).display = False
+        self.query_one(VenvDetailsPanel).display = False
+        self.query_one(".buttons").display = False
         
-        self.scan_time = time.time() - start_time
+        # Mount the loading container
+        self.mount(loading_container)
+        loading_container.mount(loading)
         
-        # Sort by size (largest first)
-        self.venvs.sort(key=lambda x: x.get('size', 0), reverse=True)
+        # Create a background task for scanning to keep UI responsive
+        async def scan_task():
+            # Perform scan
+            start_time = time.time()
+            venv_paths = []
+            count = 0
+            
+            # We'll count environments as we find them
+            for venv_path in find_venvs(self.start_dir, parallel=True):
+                venv_paths.append(venv_path)
+                count += 1
+                loading.update_progress(count)
+                
+                # Add small delay to make UI updates visible
+                await asyncio.sleep(0.01)
+            
+            # Now analyze each venv
+            loading.message = "Analyzing environments..."
+            loading.update()
+            
+            for i, venv_path in enumerate(venv_paths):
+                info = get_venv_info(venv_path)
+                self.venvs.append(info)
+                self.total_size += info.get('size', 0)
+                loading.update_progress(i + 1, len(venv_paths))
+                
+                # Add small delay to make UI updates visible
+                await asyncio.sleep(0.01)
+            
+            self.scan_time = time.time() - start_time
+            
+            # Sort by size (largest first)
+            self.venvs.sort(key=lambda x: x.get('size', 0), reverse=True)
+            
+            # Update stats and title
+            self.sub_title = f"VenvKiller v{__version__}"
+            self.query_one(StatsPanel).update_stats(
+                self.total_size, 
+                len(self.venvs), 
+                self.saved_size,
+                self.scan_time
+            )
+            
+            # Show the UI elements again
+            self.query_one(DataTable).display = True
+            self.query_one(VenvDetailsPanel).display = True
+            self.query_one(".buttons").display = True
+            
+            # Remove loading container
+            loading_container.remove()
+            
+            # Populate table
+            self.populate_table()
+            
+            # Update details if we have venvs
+            if self.venvs:
+                self.query_one(VenvDetailsPanel).update_venv(self.venvs[0])
         
-        # Update stats and title
-        self.sub_title = f"VenvKiller v{__version__}"
-        self.query_one(StatsPanel).update_stats(
-            self.total_size, 
-            len(self.venvs), 
-            self.saved_size,
-            self.scan_time
-        )
+        # Run the scan in the background
+        self.run_worker(scan_task, thread=True)
         
-        # Populate table
-        self.populate_table()
-        
-        # Update details if we have venvs
-        if self.venvs:
-            self.query_one(VenvDetailsPanel).update_venv(self.venvs[0])
-    
     def populate_table(self) -> None:
         """Populate the table with venvs."""
         # Clear existing rows
