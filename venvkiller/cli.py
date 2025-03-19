@@ -651,6 +651,12 @@ class VenvKillerApp(App):
         if not paths_to_delete:
             return
         
+        # Show notification before starting deletion
+        self.notify(f"Deleting {len(paths_to_delete)} environments, please wait...", timeout=10)
+        
+        # Update app subtitle to show deletion is in progress
+        self.sub_title = f"Deleting {len(paths_to_delete)} environments..."
+        
         # Show deletion progress dialog
         with Progress(
             SpinnerColumn(),
@@ -663,6 +669,9 @@ class VenvKillerApp(App):
             
             def update_progress(done, total, current_path):
                 progress.update(task, completed=done, description=f"[red]Deleting: {current_path}")
+                # Update subtitle with progress
+                if done < total:
+                    self.sub_title = f"Deleting environments... ({done}/{total})"
             
             venvs_deleted, bytes_freed, failures = delete_multiple_venvs(
                 paths_to_delete, update_progress
@@ -680,6 +689,9 @@ class VenvKillerApp(App):
         
         # Update table
         self.populate_table()
+        
+        # Reset subtitle
+        self.sub_title = f"VenvKiller v{__version__}"
         
         # Update stats panel
         self.query_one(StatsPanel).update_stats(
