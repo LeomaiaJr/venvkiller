@@ -18,13 +18,13 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="VenvKiller Contributors",
-    url="https://github.com/contributor/venvkiller",
+    author_email="me@leomaiajr.dev",
+    url="https://github.com/LeomaiaJr/venvkiller",
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
         "click>=8.0.0",
         "rich>=10.0.0",
-        "pathlib",
         "textual>=2.0.0",
     ],
     entry_points={
@@ -45,4 +45,9 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Topic :: Utilities",
     ],
+    keywords="virtualenv venv cleanup disk-space utility development",
+    project_urls={
+        "Bug Reports": "https://github.com/LeomaiaJr/venvkiller/issues",
+        "Source": "https://github.com/LeomaiaJr/venvkiller",
+    },
 )
