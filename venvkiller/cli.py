@@ -1,4 +1,4 @@
-"""Command-line interface for the VenvKiller tool."""
+"""Command-line interface for the venvkiller tool."""
 
 import sys
 import time
@@ -127,7 +127,7 @@ class LoadingIndicator(Static):
         self.message = message
         self.count = 0
         self.total = 0
-        self.border_title = "VenvKiller"
+        self.border_title = "venvkiller"
 
     def update_progress(self, count, total=None):
         """Update the progress count."""
@@ -150,7 +150,7 @@ class LoadingIndicator(Static):
 
 
 class VenvKillerApp(App):
-    """Textual app for VenvKiller."""
+    """Textual app for venvkiller."""
 
     CSS = """
     VenvDetailsPanel {
@@ -306,7 +306,7 @@ class VenvKillerApp(App):
             self.venvs.sort(key=lambda x: x.get("size_bytes", 0), reverse=True)
 
             # Update stats and title
-            self.sub_title = f"VenvKiller v{__version__}"
+            self.sub_title = f"venvkiller v{__version__}"
             self.query_one(StatsPanel).update_stats(
                 self.total_size, len(self.venvs), self.saved_size, self.scan_time
             )
@@ -567,7 +567,7 @@ class VenvKillerApp(App):
         self.populate_table()
 
         # Reset subtitle
-        self.sub_title = f"VenvKiller v{__version__}"
+        self.sub_title = f"venvkiller v{__version__}"
 
         # Update stats panel
         self.query_one(StatsPanel).update_stats(
@@ -604,7 +604,7 @@ class VenvKillerApp(App):
 
         # Final stats after exit
         console.clear()
-        console.print("[green]VenvKiller session summary:[/green]")
+        console.print("[green]venvkiller session summary:[/green]")
         console.print(f"- Total environments found: {len(self.venvs)}")
         console.print(f"- Environments deleted: {len(self.deleted_venvs)}")
         console.print(f"- Total size found: {format_size(self.total_size)}")

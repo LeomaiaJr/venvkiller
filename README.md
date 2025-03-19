@@ -1,15 +1,17 @@
-# VenvKiller
+# venvkiller
 
 [![PyPI version](https://img.shields.io/pypi/v/venvkiller.svg)](https://pypi.org/project/venvkiller/)
 [![Python versions](https://img.shields.io/pypi/pyversions/venvkiller.svg)](https://pypi.org/project/venvkiller/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/LeomaiaJr/venvkiller.svg)](https://github.com/LeomaiaJr/venvkiller/stargazers)
 
-A Python tool to find and delete Python virtual environments to free up disk space. VenvKiller helps developers manage and clean up unused virtual environments that can accumulate over time and consume valuable disk space.
+A Python tool to find and delete Python virtual environments to free up disk space.
 
-## Why VenvKiller?
+> **Inspiration**: This project was inspired by [npkill](https://www.npmjs.com/package/npkill), which provides similar functionality for cleaning up node_modules folders in JavaScript/Node.js projects.
 
-Python developers often create many virtual environments during development, which can end up occupying gigabytes of disk space. VenvKiller helps you:
+## Why venvkiller?
+
+Python developers often create many virtual environments during development, which can end up occupying gigabytes of disk space. venvkiller helps you:
 
 - Quickly identify all virtual environments on your system
 - See which ones are old or unused
@@ -51,27 +53,27 @@ venvkiller --recent 14 --old 90
 
 ### Command Line Options
 
-| Option | Description |
-|--------|-------------|
-| `--start-dir`, `-d` | Directory to start searching from (default: home directory) |
-| `--recent`, `-r` | Days threshold for considering an environment recent (green) |
-| `--old`, `-o` | Days threshold for considering an environment old (red) |
-| `--version` | Show version and exit |
-| `--help` | Show help message and exit |
+| Option              | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `--start-dir`, `-d` | Directory to start searching from (default: home directory)  |
+| `--recent`, `-r`    | Days threshold for considering an environment recent (green) |
+| `--old`, `-o`       | Days threshold for considering an environment old (red)      |
+| `--version`         | Show version and exit                                        |
+| `--help`            | Show help message and exit                                   |
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| Arrow keys | Navigate the list |
-| Space | Mark/unmark for deletion |
-| 'd' | Delete marked environments |
-| 'o' | Open containing folder |
-| 'q' | Quit |
+| Key        | Action                     |
+| ---------- | -------------------------- |
+| Arrow keys | Navigate the list          |
+| Space      | Mark/unmark for deletion   |
+| 'd'        | Delete marked environments |
+| 'o'        | Open containing folder     |
+| 'q'        | Quit                       |
 
 ## Screenshots
 
-![VenvKiller Main Screen](https://raw.githubusercontent.com/LeomaiaJr/venvkiller/main/screenshots/main.png)
+![venvkiller Main Screen](https://raw.githubusercontent.com/LeomaiaJr/venvkiller/main/screenshots/main.png)
 
 ## Development
 
@@ -87,15 +89,20 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install in development mode
-pip install -e .
+pip install -e ".[dev]"
 
 # Run the development version
 python -m venvkiller.cli
+
+# Run tests
+pytest tests/
+# Or for more verbose output with coverage
+pytest tests/ -v --cov=venvkiller
 ```
 
 ## How It Works
 
-VenvKiller works by recursively scanning directories for Python virtual environments, which it identifies by looking for common markers like `pyvenv.cfg`, `bin/activate`, or `Scripts/activate.bat`. It analyzes each environment to determine:
+venvkiller works by recursively scanning directories for Python virtual environments, which it identifies by looking for common markers like `pyvenv.cfg`, `bin/activate`, or `Scripts/activate.bat`. It analyzes each environment to determine:
 
 1. Size on disk
 2. Last modified date

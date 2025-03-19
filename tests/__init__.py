@@ -1,1 +1,1 @@
-"""Test package for VenvKiller.""" 
+"""Tests for the venvkiller package."""

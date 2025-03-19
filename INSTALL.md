@@ -1,6 +1,6 @@
-# Installing VenvKiller
+# Installing venvkiller
 
-VenvKiller is a Python utility to find and delete Python virtual environments to free up disk space.
+venvkiller is a Python utility to find and delete Python virtual environments to free up disk space.
 
 ## Requirements
 
@@ -9,13 +9,13 @@ VenvKiller is a Python utility to find and delete Python virtual environments to
 
 ## Dependencies
 
-VenvKiller relies on the following major dependencies:
+venvkiller relies on the following major dependencies:
 - click: Command-line interface parsing
 - rich: Terminal formatting and progress bars
 - textual: Advanced TUI interface with widgets
 - pathlib: Path manipulation
 
-All dependencies will be automatically installed when you install VenvKiller.
+All dependencies will be automatically installed when you install venvkiller.
 
 ## Installation Methods
 
@@ -78,7 +78,7 @@ venvkiller --help
 
 ## User Interface
 
-VenvKiller uses the Textual library to provide a modern, cursor-based terminal user interface:
+venvkiller uses the Textual library to provide a modern, cursor-based terminal user interface:
 
 - Table of virtual environments with size, age, and other details
 - Detail panel showing comprehensive information about the selected environment
@@ -91,12 +91,12 @@ VenvKiller uses the Textual library to provide a modern, cursor-based terminal u
 ### Common Issues
 
 - **Permission errors**: If you encounter permission issues when scanning system directories, try running with elevated privileges or exclude those directories.
-- **Environment not found**: If VenvKiller isn't finding specific environments, check if they follow standard directory structures (.venv, venv, env, etc.)
+- **Environment not found**: If venvkiller isn't finding specific environments, check if they follow standard directory structures (.venv, venv, env, etc.)
 - **Display issues**: If you experience display rendering problems, ensure your terminal supports Unicode characters and True Color.
 
 ### Terminal Compatibility
 
-VenvKiller's TUI should work in most modern terminals including:
+venvkiller's TUI should work in most modern terminals including:
 - Terminal.app (macOS)
 - iTerm2 (macOS)
 - Windows Terminal (Windows)
